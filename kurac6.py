@@ -136,11 +136,34 @@ class DepthCalculator:
         # Post-processing
         filtered_disparity = median_filter(filtered_disparity, size=3)
         disp_vis = cv2.normalize(filtered_disparity, None, alpha=0, beta=255, norm_type=cv2.NORM_MINMAX)
-        disp_vis = np.uint8(disp_vis)
+        #disp_vis = disp_vis.astype(np.int16)
+        #disp_vis = np.uint8(disp_vis)
         
         return filtered_disparity, disp_vis
 
-    def run(self, left_img_path, right_img_path, calib_file):
+    def run_without_fuckery(self, left_img, right_img, calib_file):
+        with open(calib_file, 'r') as f:
+            for line in f.readlines():
+                if 'P_rect_02' in line:
+                    self.P2 = np.array([float(x) for x in line.strip().split()[1:]]).reshape(3, 4)
+                elif 'P_rect_03' in line:
+                    self.P3 = np.array([float(x) for x in line.strip().split()[1:]]).reshape(3, 4)
+
+        self.original_img = left_img
+
+        if self.original_img is None or right_img is None:
+            raise ValueError("Could not load images")
+
+        # Convert to grayscale and apply preprocessing
+        left_gray = cv2.cvtColor(self.original_img, cv2.COLOR_BGR2GRAY)
+        right_gray = cv2.cvtColor(right_img, cv2.COLOR_BGR2GRAY)
+
+        # Compute disparity
+        self.disparity, self.disp_vis = self.compute_disparity(left_gray, right_gray)
+
+
+    #def run(self, left_img_path, right_img_path, calib_file):
+    def run(self, left_img, right_img, calib_file):
         # Load calibration
         with open(calib_file, 'r') as f:
             for line in f.readlines():
@@ -150,9 +173,10 @@ class DepthCalculator:
                     self.P3 = np.array([float(x) for x in line.strip().split()[1:]]).reshape(3, 4)
 
         # Load and preprocess images
-        self.original_img = cv2.imread(left_img_path)
-        right_img = cv2.imread(right_img_path)
-        
+        #self.original_img = cv2.imread(left_img_path)
+        #right_img = cv2.imread(right_img_path)
+        self.original_img = left_img
+
         if self.original_img is None or right_img is None:
             raise ValueError("Could not load images")
 
@@ -175,7 +199,7 @@ class DepthCalculator:
             if key == 27:  # ESC to exit
                 break
             elif key == ord('d'):  # Press 'd' to toggle between disparity and original
-                if cv2.getWindowImage(self.window_name) is self.original_img:
+                if cv2.getWindowImageRect(self.window_name) is self.original_img:
                     cv2.imshow(self.window_name, self.disp_vis)
                 else:
                     cv2.imshow(self.window_name, self.original_img)
@@ -189,3 +213,5 @@ if __name__ == "__main__":
         r'C:\Users\ivorb\Downloads\34759_final_project_rect\34759_final_project_rect\seq_01\image_03\data\000000.png',
         'calib_cam_to_cam.txt'
     )
+
+
