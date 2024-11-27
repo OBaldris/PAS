@@ -1,20 +1,10 @@
-
 import numpy as np
 import cv2
+import glob
 import matplotlib.pyplot as plt
 
 
-
-def calibrate():
-    nb_vertical = 5
-    nb_horizontal = 7
-
-
-
-
-"""
-Implement the number of vertical and horizontal corners
-"""
+#Implement the number of vertical and horizontal corners
 nb_vertical = 6
 nb_horizontal = 6
 
@@ -29,15 +19,16 @@ imgpoints = [] # 2d points in image plane.
 images = glob.glob('imgs/*.png')
 assert images
 
+
+
 for fname in images:
     img = cv2.imread(fname)
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
-    """
-    Implement findChessboardCorners here
-    """
-    patternsize = (nb_horizontal, nb_vertical)
-    ret, corners = cv2.findChessboardCorners(gray, patternsize)
+    
+    #Implement findChessboardCorners here
+    ret, corners = cv2.findChessboardCorners(gray, (nb_vertical,nb_horizontal))
+    
 
     # If found, add object points, image points (after refining them)
     if ret == True:
@@ -52,16 +43,10 @@ for fname in images:
 
 cv2.destroyAllWindows()
 
-
-
-
 ret, mtx, dist, rvecs, tvecs = cv2.calibrateCamera(objpoints, imgpoints, gray.shape[::-1], None, None)
 img = cv2.imread('imgs/1403709067387836928.png')
 h,  w = img.shape[:2]
 newcameramtx, roi = cv2.getOptimalNewCameraMatrix(mtx,dist,(w,h),1,(w,h))
-
-
-
 
 # undistort
 dst = cv2.undistort(img, mtx, dist, None, newcameramtx)
@@ -75,8 +60,5 @@ ax[1].set_title('Undistorted image')
 
 
 
-# crop the image
-x,y,w,h = roi
-dst = dst[y:y+h, x:x+w]
-plt.figure(figsize=(10,10))
-plt.imshow(dst[...,[2,1,0]])
+
+
