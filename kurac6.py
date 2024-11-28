@@ -17,6 +17,35 @@ class DepthCalculator:
         self.original_img = None
         self.object_detector = cv2.createBackgroundSubtractorMOG2(history=500, varThreshold=16, detectShadows=False)
         
+    def pixel_to_world(self, x, y, depth):
+    	"""Convert pixel coordinates to world coordinates in meters with (0,0) at bottom-left."""
+    	# Get camera parameters from P2 matrix
+    	fx = self.P2[0, 0]  # Focal length x
+    	fy = self.P2[1, 1]  # Focal length y
+    	cx = self.P2[0, 2]  # Principal point x
+    	cy = self.P2[1, 2]  # Principal point y
+    
+    	# Get image dimensions
+    	img_height, img_width = self.original_img.shape[:2]
+    
+    	# Convert y coordinate to measure from bottom instead of top
+    	y = img_height - y
+    
+    	# Convert to world coordinates
+    	# X coordinate: measured from left edge
+    	X = (x - cx) * depth / fx
+    	# Make X positive by adding offset
+    	X = X + (cx * depth / fx)
+    
+    	# Y coordinate: measured from bottom edge
+    	Y = (y - cy) * depth / fy
+    	# Make Y positive by adding offset
+    	Y = Y + (cy * depth / fy)
+    
+    	Z = depth
+    
+    	return X, Y, Z
+        
     def detect_object_mask(self, region_img):
         hsv = cv2.cvtColor(region_img, cv2.COLOR_BGR2HSV)
         gray = cv2.cvtColor(region_img, cv2.COLOR_BGR2GRAY)
@@ -39,83 +68,89 @@ class DepthCalculator:
         return combined_mask
 
     def calculate_weighted_depth(self, top_left, bottom_right):
-        """Calculate depth with corrected scaling factors."""
-        focal_length = self.P2[0, 0]  # Typically around 721.5377 for KITTI
-        baseline = abs(self.P2[0, 3] - self.P3[0, 3]) / self.P2[0, 0]  # Around 0.54 meters for KITTI
-        
-        # Modified distance correction factor
-        distance_correction = 1.8  # Increased from 0.54 to make distances farther
-        
-        x1, y1 = min(top_left[0], bottom_right[0]), min(top_left[1], bottom_right[1])
-        x2, y2 = max(top_left[0], bottom_right[0]), max(top_left[1], bottom_right[1])
-        
-        x1 = max(0, min(x1, self.disparity.shape[1] - 1))
-        x2 = max(0, min(x2, self.disparity.shape[1] - 1))
-        y1 = max(0, min(y1, self.disparity.shape[0] - 1))
-        y2 = max(0, min(y2, self.disparity.shape[0] - 1))
-        
-        region_disparity = self.disparity[y1:y2 + 1, x1:x2 + 1]
-        region_img = self.original_img[y1:y2 + 1, x1:x2 + 1]
-        
-        object_mask = self.detect_object_mask(region_img)
-        object_mask = object_mask.astype(float) / 255.0
-        
-        # Adjusted disparity threshold for farther distances
-        valid_disparity = (region_disparity > 1.0) & (region_disparity < 96.0)
-
-        if np.any(valid_disparity):
-            height, width = region_disparity.shape
-            y_coords, x_coords = np.ogrid[:height, :width]
-            center_y, center_x = height / 2, width / 2
-            
-            size_factor = min(width, height) / 4
-            dist_from_center = np.sqrt((x_coords - center_x)**2 + (y_coords - center_y)**2)
-            center_weights = np.exp(-0.5 * (dist_from_center / size_factor)**2)
-
-            depths = np.zeros_like(region_disparity, dtype=float)
-            valid_disparities = region_disparity[valid_disparity]
-            
-            # Modified depth calculation with new correction factors
-            depths[valid_disparity] = (focal_length * baseline * distance_correction) / valid_disparities
-            
-            # Increased scaling factor to make distances farther
-            depths *= 0.2  # Changed from 0.3 to 1.5
-            
-            median_depth = np.median(depths[depths > 0])
-            depth_std = np.std(depths[depths > 0])
-            
-            # Wider depth range for more distant objects
-            range_factor = 0.8  # Increased from 1.5
-            min_depth = max(1.0, median_depth - range_factor * depth_std)  # Increased minimum from 0.5
-            max_depth = median_depth + range_factor * depth_std
-            
-            valid_depths_mask = (depths > min_depth) & (depths < max_depth)
-            valid_depths = depths[valid_depths_mask]
-
-            if len(valid_depths) > 0:
-                # Modified proximity weighting for farther distances
-                proximity_weights = 1 / (depths + 0.5)**0.8  # Adjusted exponential factor
-                proximity_weights[~valid_depths_mask] = 0
+        """Calculate depth and world coordinates with corrected scaling factors."""
+        try:
+            if self.P2 is None or self.P3 is None:
+                raise ValueError("Calibration matrices not initialized")
                 
-                total_weights = center_weights * proximity_weights * (object_mask + 0.3)
-                total_weights = total_weights / (np.sum(total_weights) + 1e-10)
-                
-                weighted_depth = np.sum(depths * total_weights)
+            focal_length = self.P2[0, 0]
+            baseline = abs(self.P2[0, 3] - self.P3[0, 3]) / self.P2[0, 0]
+            
+            distance_correction = 1.8
+            
+            x1, y1 = min(top_left[0], bottom_right[0]), min(top_left[1], bottom_right[1])
+            x2, y2 = max(top_left[0], bottom_right[0]), max(top_left[1], bottom_right[1])
+            
+            x1 = max(0, min(x1, self.disparity.shape[1] - 1))
+            x2 = max(0, min(x2, self.disparity.shape[1] - 1))
+            y1 = max(0, min(y1, self.disparity.shape[0] - 1))
+            y2 = max(0, min(y2, self.disparity.shape[0] - 1))
+            
+            region_disparity = self.disparity[y1:y2 + 1, x1:x2 + 1]
+            region_img = self.original_img[y1:y2 + 1, x1:x2 + 1]
+            
+            object_mask = self.detect_object_mask(region_img)
+            object_mask = object_mask.astype(float) / 255.0
+            
+            valid_disparity = (region_disparity > 1.0) & (region_disparity < 96.0)
 
-                if len(valid_depths) > 5:
-                    bandwidth = 0.15 * (np.max(valid_depths) - np.min(valid_depths))  # Increased bandwidth
-                    kde = gaussian_kde(valid_depths, bw_method=bandwidth)
-                    depth_range = np.linspace(np.min(valid_depths), np.max(valid_depths), 100)
-                    mode_depth = depth_range[np.argmax(kde(depth_range))]
-                else:
-                    mode_depth = np.median(valid_depths)
+            if np.any(valid_disparity):
+                height, width = region_disparity.shape
+                y_coords, x_coords = np.ogrid[:height, :width]
+                center_y, center_x = height / 2, width / 2
                 
-                confidence = min(1.0, len(valid_depths) / (width * height * 0.3))
-                final_depth = confidence * mode_depth + (1 - confidence) * weighted_depth
+                size_factor = min(width, height) / 4
+                dist_from_center = np.sqrt((x_coords - center_x)**2 + (y_coords - center_y)**2)
+                center_weights = np.exp(-0.5 * (dist_from_center / size_factor)**2)
+
+                depths = np.zeros_like(region_disparity, dtype=float)
+                valid_disparities = region_disparity[valid_disparity]
                 
-                return (final_depth, mode_depth), (x1, y1), (x2, y2)
-        
-        return None, (x1, y1), (x2, y2)
+                depths[valid_disparity] = (focal_length * baseline * distance_correction) / valid_disparities
+                depths *= 0.2
+                
+                median_depth = np.median(depths[depths > 0])
+                depth_std = np.std(depths[depths > 0])
+                
+                range_factor = 0.8
+                min_depth = max(1.0, median_depth - range_factor * depth_std)
+                max_depth = median_depth + range_factor * depth_std
+                
+                valid_depths_mask = (depths > min_depth) & (depths < max_depth)
+                valid_depths = depths[valid_depths_mask]
+
+                if len(valid_depths) > 0:
+                    proximity_weights = 1 / (depths + 0.5)**0.8
+                    proximity_weights[~valid_depths_mask] = 0
+                    
+                    total_weights = center_weights * proximity_weights * (object_mask + 0.3)
+                    total_weights = total_weights / (np.sum(total_weights) + 1e-10)
+                    
+                    weighted_depth = np.sum(depths * total_weights)
+
+                    if len(valid_depths) > 5:
+                        bandwidth = 0.15 * (np.max(valid_depths) - np.min(valid_depths))
+                        kde = gaussian_kde(valid_depths, bw_method=bandwidth)
+                        depth_range = np.linspace(np.min(valid_depths), np.max(valid_depths), 100)
+                        mode_depth = depth_range[np.argmax(kde(depth_range))]
+                    else:
+                        mode_depth = np.median(valid_depths)
+                    
+                    confidence = min(1.0, len(valid_depths) / (width * height * 0.3))
+                    final_depth = confidence * mode_depth + (1 - confidence) * weighted_depth
+                    
+                    # Calculate world coordinates for center point
+                    center_x = (x1 + x2) / 2
+                    center_y = (y1 + y2) / 2
+                    X, Y, Z = self.pixel_to_world(center_x, center_y, final_depth)
+                    
+                    return ((X, Y, Z), mode_depth), (x1, y1), (x2, y2)
+            
+            return None, (x1, y1), (x2, y2)
+            
+        except Exception as e:
+            print(f"Error in depth calculation: {e}")
+            return None, top_left, bottom_right
 
     def compute_disparity(self, left_gray, right_gray):
         stereo = cv2.StereoSGBM_create(
@@ -175,6 +210,7 @@ class DepthCalculator:
         right_gray = clahe.apply(right_gray)
 
         self.disparity, self.disp_vis = self.compute_disparity(left_gray, right_gray)
+
 if __name__ == "__main__":
     calculator = DepthCalculator()
     calculator.run(
