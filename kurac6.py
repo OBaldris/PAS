@@ -16,7 +16,36 @@ class DepthCalculator:
         self.window_name = 'Select Area for Depth Calculation'
         self.original_img = None
         self.object_detector = cv2.createBackgroundSubtractorMOG2(history=500, varThreshold=16, detectShadows=False)
-        
+
+    def world_to_pixel(self, X, Y, Z):
+    	"""Convert world coordinates in meters to pixel coordinates with (0,0) at top-left."""
+    	# Get camera parameters from P2 matrix
+    	fx = self.P2[0, 0]  # Focal length x
+    	fy = self.P2[1, 1]  # Focal length y
+    	cx = self.P2[0, 2]  # Principal point x
+    	cy = self.P2[1, 2]  # Principal point y
+    
+    	# Get image dimensions
+    	img_height, img_width = self.original_img.shape[:2]
+    
+    	# Project 3D point to image plane
+    	x = (fx * X / Z) + cx
+    
+    	# Convert Y to measure from top instead of bottom
+    	Y_from_top = Y - (cy * Z / fy)
+    	y = (fy * Y_from_top / Z) + cy
+    	y = img_height - y  # Invert Y coordinate
+    
+    	# Round to nearest pixel
+    	x = int(round(x))
+    	y = int(round(y))
+    
+    	# Ensure coordinates are within image bounds
+    	x = max(0, min(x, img_width - 1))
+    	y = max(0, min(y, img_height - 1))
+    
+    	return x, y        
+
     def pixel_to_world(self, x, y, depth):
     	"""Convert pixel coordinates to world coordinates in meters with (0,0) at bottom-left."""
     	# Get camera parameters from P2 matrix
