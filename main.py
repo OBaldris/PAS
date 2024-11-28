@@ -7,12 +7,29 @@ from ultralytics import YOLO
 import Kalman
 
 
-def within_margin(pred_x, pred_y, act_x, act_y):
-    margin = 20
-    if pred_x + margin >= act_x or pred_x - margin <= act_x and pred_y + margin >= act_y or pred_y - margin <= act_y:
-        return True
-    else:
+def is_valid(Filter_list, Class_list, Taken_list, class_index, filter_index):
+    if not Filter_list:
         return False
+    if Filter_list[filter_index].class_name != Class_list[class_index]:
+        return False
+    if filter_index in Taken_list:
+        return False
+    return True
+
+def within_margin(pred_x, pred_z, act_pos):
+    margin = 1000
+    if np.sqrt((pred_x-act_pos[0])**2 + (pred_z-act_pos[2])**2) <= margin:
+        return True
+    return False
+
+def within_borders(pixel_x, pixel_y, img):
+    margin = 5
+    height = img.shape[0]
+    width = img.shape[1]
+    print("img shape:", img.shape)
+    if (pixel_x-margin) > 0 or (pixel_y-margin) > 0 or (pixel_x+margin) < width or (pixel_y+margin) < height:
+        return True
+    return False
 
 def get_center(x1, y1, x2, y2):
     center_x = (x1+x2) / 2
@@ -20,11 +37,14 @@ def get_center(x1, y1, x2, y2):
 
     return (center_x, center_y)
 
+def dist2D(pred_x, pred_z, act_pos):
+    return np.sqrt((pred_x-act_pos[0])**2 + (pred_z-act_pos[2])**2)
+
 def get_depth_from_bbox(depth_calculator, results):
     class_names = []
     confidences = []
-    weighted_depths = []
     centers = []
+    world_coords = []
 
     for result in results[0]:
         box = result.boxes.xyxy[0]
@@ -39,14 +59,13 @@ def get_depth_from_bbox(depth_calculator, results):
         confidence = result.boxes.conf.item()
         confidences.append(confidence)
 
-        weighted_depth, _ = depth_calculator.calculate_weighted_depth((x1, y1), (x2, y2))[0]
-        weighted_depths.append(weighted_depth)
+        coords_data, _ = depth_calculator.calculate_weighted_depth((x1, y1), (x2, y2))[0]
+        if coords_data is not None:
+            world_coords.append(coords_data)
+        else:
+            world_coords.append((0, 0, 0))
 
-
-        #print(f'object: {class_name}, confidence: {confidence} at {x, y, x2, y2}')
-        #print(depth_calculator.calculate_weighted_depth((x, y), (x2, y2)))
-
-    return class_names, confidences, weighted_depths, centers
+    return class_names, confidences, world_coords, centers
 
 
 if __name__ == "__main__":
@@ -72,44 +91,47 @@ if __name__ == "__main__":
         results = model(frame_data["left_image"], classes=class_indexes)
 
         DepthObj = kurac6.DepthCalculator()
-        DepthObj.run_without_fuckery(frame_data["left_image"], frame_data["right_image"], calibration_data_path)
+        DepthObj.run(frame_data["left_image"], frame_data["right_image"], calibration_data_path, input_is_array=True)
 
         class_names, confidences, weighted_depths, centers = get_depth_from_bbox(DepthObj, results)
-        #print("KF_LIST1:", KF_list)
+        #print("weighted_depths", weighted_depths)
         if class_names is not None:
             new_KF_list = [None]*len(class_names)
-            for j in range(len(class_names)):
 
+            KF_taken = []
+            for j in range(len(class_names)):
                 min_dist = 99999
                 KF_match_index = -1
-                KF_taken = []
                 center = centers[j]
-                #print("KF_LIST2:", KF_list)
                 for q in range(len(KF_list)):
-                    #print("KF_LIST3:", KF_list)
                     if not KF_list:
                         continue
                     if KF_list[q].class_name != class_names[j]:
                         continue
                     if q in KF_taken:
                         continue
-                    predicted_pos = [KF_list[q].X[0], KF_list[q].X[1], KF_list[q].X[2]]
 
-                    if not within_margin(predicted_pos[0], predicted_pos[1], center[0], center[1]):
-                        continue
+                    predicted_pos = [KF_list[q].X[0], KF_list[q].X[1]]
 
-                    dist = np.sqrt((predicted_pos[0] - center[0])**2 + (predicted_pos[1] - center[1])**2 + (predicted_pos[2] - weighted_depths[j])**2)
-                    if dist < min_dist:
+                    #if not within_margin(predicted_pos[0], predicted_pos[1], weighted_depths[j]):
+                        #print("KF NR ", q, " IS NOT WITHIN MARGIN?")
+                        #continue
+
+                    dist = dist2D(predicted_pos[0], predicted_pos[1], weighted_depths[j])
+                    if dist < min_dist and dist < 1000:
                         min_dist = dist
                         KF_match_index = q
+                        #print("MATCH     j:", j, ", q:", q)
 
                 if KF_match_index != -1:
                     new_KF_list[j] = KF_list[KF_match_index]
                     KF_taken.append(KF_match_index)
+
                 else:
-                    new_KF_list[j] = Kalman.KalmanFilter()
+                    #new_KF_list[j] = Kalman.KalmanFilter3D()
+                    new_KF_list[j] = Kalman.KalmanFilter2D()
                     new_KF_list[j].class_name = class_names[j]
-                    new_KF_list[j].X = np.array([[center[0]], [center[1]], [weighted_depths[j]], [0], [0], [0], [0], [0], [0]])
+                    new_KF_list[j].X = np.array([[weighted_depths[j][0]], [weighted_depths[j][2]], [0], [0], [0], [0]])
                     print("new_KF_list[j].X", new_KF_list[j].X)
 
             KF_list = new_KF_list.copy()
@@ -117,35 +139,27 @@ if __name__ == "__main__":
             for j in range(len(KF_list)):
                 center = centers[j]
                 # draw detection
-                cv2.circle(frame_data["left_image"], (int(center[0]),int(center[1])), 10, (0, 255, 0), 3)
+                cv2.circle(frame_data["left_image"], (int(center[0]),int(center[1])), 20, (0, 255, 0), 3)
 
-                #print("Center:", center)
-                KF_list[j].Z = np.array([[center[0]], [center[1]], [weighted_depths[j]]])
-                #print("Shape of Z: ", np.shape(KF_list[j].Z), KF_list[j].Z)
+                KF_list[j].Z = np.array([[weighted_depths[j][0]], [weighted_depths[j][2]]])
 
-                KF_list[j].update()
+                print("Predicted placement", KF_list[j].X[0], " ", KF_list[j].X[1])
                 KF_list[j].predict()
+                KF_list[j].update()
 
-                #print("Output from KF: ",KF_list[j].X)
+                # MASSIVE DRIFT CAUSED BY DIFFERENCE IN UNITS!!!
+                # WE USE PIXELS FOR x, y BUT METERS FOR z!!!
 
-                circle_center_coords = (int(KF_list[j].X[0]), int(KF_list[j].X[1]))
-                #print("circle center", circle_center_coords)
-                print("Predicted distances", KF_list[j].X[2])
-                print("Measured distances", weighted_depths[j])
-                cv2.circle(frame_data["left_image"], circle_center_coords, max(int(300/KF_list[j].X[2]),5), (0,0,255), 3)
+                pixel_x, pixel_y = DepthObj.world_to_pixel(KF_list[j].X[0,0], weighted_depths[j][1], KF_list[j].X[1,0])
 
-                #x = KF_list.Xpred
-                #P = KF_list.Ppred
+                circle_center_coords = (pixel_x, pixel_y)#(int(KF_list[j].X[0]), int(center[1]))
+
+                print("Actual placement", weighted_depths[j][0], " ", weighted_depths[j][2])
+                cv2.circle(frame_data["left_image"], circle_center_coords, max(int(50 / (KF_list[j].X[1] + 1)), 5), (0, 0, 255), 3)
+
             cv2.imshow("frame",frame_data["left_image"])
             cv2.waitKey(0)
 
-
-        #for w in range(len(new_KF_list)):
-            #print("KF LIST CLASS NAMES:", w, new_KF_list[w].class_name)
-
-        previous_class_names = class_names
-
-        #print("CLASS NAMES: ", class_names)
 
 
 
