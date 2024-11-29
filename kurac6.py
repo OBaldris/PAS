@@ -17,64 +17,35 @@ class DepthCalculator:
         self.original_img = None
         self.object_detector = cv2.createBackgroundSubtractorMOG2(history=500, varThreshold=16, detectShadows=False)
 
-    def world_to_pixel(self, X, Y, Z):
-    	"""Convert world coordinates in meters to pixel coordinates with (0,0) at top-left."""
-    	# Get camera parameters from P2 matrix
-    	fx = self.P2[0, 0]  # Focal length x
-    	fy = self.P2[1, 1]  # Focal length y
-    	cx = self.P2[0, 2]  # Principal point x
-    	cy = self.P2[1, 2]  # Principal point y
-    
-    	# Get image dimensions
-    	img_height, img_width = self.original_img.shape[:2]
-    
-    	# Project 3D point to image plane
-    	x = (fx * X / Z) + cx
-    
-    	# Convert Y to measure from top instead of bottom
-    	Y_from_top = Y - (cy * Z / fy)
-    	y = (fy * Y_from_top / Z) + cy
-    	y = img_height - y  # Invert Y coordinate
-    
-    	# Round to nearest pixel
-    	x = int(round(x))
-    	y = int(round(y))
-    
-    	# Ensure coordinates are within image bounds
-    	x = max(0, min(x, img_width - 1))
-    	y = max(0, min(y, img_height - 1))
-    
-    	return x, y        
+       
 
     def pixel_to_world(self, x, y, depth):
-    	"""Convert pixel coordinates to world coordinates in meters with (0,0) at bottom-left."""
-    	# Get camera parameters from P2 matrix
-    	fx = self.P2[0, 0]  # Focal length x
-    	fy = self.P2[1, 1]  # Focal length y
-    	cx = self.P2[0, 2]  # Principal point x
-    	cy = self.P2[1, 2]  # Principal point y
+        """Convert pixel coordinates to world coordinates in meters with (0,0) at bottom-left."""
+        # Get camera parameters from P2 matrix
+        fx = self.P2[0, 0]  # Focal length x
+        fy = self.P2[1, 1]  # Focal length y
+        cx = self.P2[0, 2]  # Principal point x
+        cy = self.P2[1, 2]  # Principal point y
     
-    	# Get image dimensions
-    	img_height, img_width = self.original_img.shape[:2]
+        # Get image dimensions 
+        img_height, img_width = self.original_img.shape[:2]
     
-    	# Convert y coordinate to measure from bottom instead of top
-    	y = img_height - y
+        # Convert y coordinate to measure from bottom instead of top
+        y = img_height - y
     
-    	# Convert to world coordinates
-    	# X coordinate: measured from left edge
-    	X = (x - cx) * depth / fx
-    	# Make X positive by adding offset
-    	X = X + (cx * depth / fx)
+    	# Scale factor for far distances
+        scale_factor = 3.0/depth
     
-    	# Y coordinate: measured from bottom edge
-    	Y = (y - cy) * depth / fy
-    	# Make Y positive by adding offset
-    	Y = Y + (cy * depth / fy)
+        X = ((x * depth) / fx) * scale_factor
     
-    	Z = depth
+        # Always positive Y from bottom edge, properly scaled
+        Y = ((y * depth) / fy) * scale_factor
     
-    	return X, Y, Z
-        
+        Z = depth
+    
+        return X, Y, Z
+    
+    	
     def detect_object_mask(self, region_img):
         hsv = cv2.cvtColor(region_img, cv2.COLOR_BGR2HSV)
         gray = cv2.cvtColor(region_img, cv2.COLOR_BGR2GRAY)

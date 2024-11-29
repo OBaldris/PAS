@@ -102,9 +102,10 @@ if __name__ == "__main__":
                                                [world_coord[2]], 
                                                [0], [0], [0], 
                                                [0], [0], [0]])
-                    print(f"New object: {class_names[j]} at X:{world_coord[0]:.2f}m Y:{world_coord[1]:.2f}m Z:{world_coord[2]:.2f}m")
-
-	
+                    print(f"Object {j} ({class_names[j]}):")
+                    print(f"  Pixel coordinates: x:{centers[j][0]:.1f} y:{centers[j][1]:.1f}")
+                    print(f"  World coordinates: X:{world_coord[0]:.2f}m Y:{world_coord[1]:.2f}m Z:{world_coord[2]:.2f}m")
+                    print("---")
 
             KF_list = new_KF_list.copy()
 
@@ -120,10 +121,11 @@ if __name__ == "__main__":
                 KF_list[j].predict()
 
                 circle_center_coords = (int(center[0]), int(center[1]))
-                print(f"Object {j} - World coordinates: X:{world_coord[0]:.2f}m Y:{world_coord[1]:.2f}m Z:{world_coord[2]:.2f}m")
-                pixel_x, pixel_y = DepthObj.world_to_pixel(world_coord[0], world_coord[1], world_coord[2])
-                print(f"World coordinates projected to pixel coordinates: ({pixel_x}, {pixel_y})")
-                 
+                print(f"Object {j} ({class_names[j]}):")
+                print(f"  Pixel coordinates: x:{center[0]:.1f} y:{center[1]:.1f}")
+                print(f"  World coordinates: X:{world_coord[0]:.2f}m Y:{world_coord[1]:.2f}m Z:{world_coord[2]:.2f}m")
+                print("---")
+
                 # Draw prediction circle (size inversely proportional to Z distance)
                 circle_radius = max(int(300/world_coord[2]), 5)
                 cv2.circle(frame_data["left_image"], circle_center_coords, circle_radius, (0,0,255), 3)
