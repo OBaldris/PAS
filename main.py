@@ -5,6 +5,7 @@ import load_data
 import kurac6
 from ultralytics import YOLO
 import Kalman
+import matplotlib.pyplot as plt
 
 
 def is_valid(Filter_list, Class_list, Taken_list, class_index, filter_index):
@@ -17,7 +18,7 @@ def is_valid(Filter_list, Class_list, Taken_list, class_index, filter_index):
     return True
 
 def within_margin(pred_x, pred_z, act_pos):
-    margin = 1000
+    margin = 0.5
     if np.sqrt((pred_x-act_pos[0])**2 + (pred_z-act_pos[2])**2) <= margin:
         return True
     return False
@@ -82,6 +83,17 @@ if __name__ == "__main__":
     KF_list = []
     previous_class_names = []
 
+    pred_plot_list = []
+    act_plot_list = []
+
+    color11 = (0.1, 0.1, 0.4, 1.0)
+    color12 = (0.2, 0.2, 0.8, 1.0)
+    colormap1 = np.array([color11, color12])
+
+    color21 = (0.4, 0.1, 0.1, 1.0)
+    color22 = (0.8, 0.2, 0.2, 1.0)
+    colormap2 = np.array([color21, color22])
+
     # Load a specific sequence
     data.load_sequence(sequence_num=1)
 
@@ -97,6 +109,7 @@ if __name__ == "__main__":
         #print("weighted_depths", weighted_depths)
         if class_names is not None:
             new_KF_list = [None]*len(class_names)
+
 
             KF_taken = []
             for j in range(len(class_names)):
@@ -118,7 +131,7 @@ if __name__ == "__main__":
                         #continue
 
                     dist = dist2D(predicted_pos[0], predicted_pos[1], weighted_depths[j])
-                    if dist < min_dist and dist < 1000:
+                    if dist < min_dist and dist < 10:
                         min_dist = dist
                         KF_match_index = q
                         #print("MATCH     j:", j, ", q:", q)
@@ -132,9 +145,10 @@ if __name__ == "__main__":
                     new_KF_list[j] = Kalman.KalmanFilter2D()
                     new_KF_list[j].class_name = class_names[j]
                     new_KF_list[j].X = np.array([[weighted_depths[j][0]], [weighted_depths[j][2]], [0], [0], [0], [0]])
-                    print("new_KF_list[j].X", new_KF_list[j].X)
+                    #print("new_KF_list[j].X", new_KF_list[j].X)
 
             KF_list = new_KF_list.copy()
+            #print("len(KF_list)", len(KF_list))
 
             for j in range(len(KF_list)):
                 center = centers[j]
@@ -143,19 +157,39 @@ if __name__ == "__main__":
 
                 KF_list[j].Z = np.array([[weighted_depths[j][0]], [weighted_depths[j][2]]])
 
-                print("Predicted placement", KF_list[j].X[0], " ", KF_list[j].X[1])
+                #print("Predicted placement", KF_list[j].X[0], " ", KF_list[j].X[1])
+                pixel_x, pixel_y = DepthObj.world_to_pixel(KF_list[j].X[0, 0], weighted_depths[j][1],
+                                                           KF_list[j].X[1, 0])
                 KF_list[j].predict()
-                KF_list[j].update()
 
                 # MASSIVE DRIFT CAUSED BY DIFFERENCE IN UNITS!!!
                 # WE USE PIXELS FOR x, y BUT METERS FOR z!!!
 
-                pixel_x, pixel_y = DepthObj.world_to_pixel(KF_list[j].X[0,0], weighted_depths[j][1], KF_list[j].X[1,0])
+                #pixel_x, pixel_y = DepthObj.world_to_pixel(KF_list[j].X[0,0], weighted_depths[j][1], KF_list[j].X[1,0])
+
+                pred_plot_list.append([float(KF_list[j].X[0, 0]), float(KF_list[j].X[1, 0])])
+                act_plot_list.append([float(weighted_depths[j][0]), float(weighted_depths[j][2])])
 
                 circle_center_coords = (pixel_x, pixel_y)#(int(KF_list[j].X[0]), int(center[1]))
 
-                print("Actual placement", weighted_depths[j][0], " ", weighted_depths[j][2])
+                #print("Actual placement", weighted_depths[j][0], " ", weighted_depths[j][2])
                 cv2.circle(frame_data["left_image"], circle_center_coords, max(int(50 / (KF_list[j].X[1] + 1)), 5), (0, 0, 255), 3)
+
+                KF_list[j].update()
+
+            #print("pred_plot_list", pred_plot_list)
+            #print("pred_plot_list[:][0]", [x[0] for x in pred_plot_list])
+
+            categories = [0]*len(pred_plot_list)
+            print(categories)
+            for g in range(len(KF_list)):
+                categories[-g-1] = 1
+
+            print(categories)
+
+            plt.scatter([x[0] for x in pred_plot_list], [x[1] for x in pred_plot_list], c=colormap1[categories])
+            plt.scatter([x[0] for x in act_plot_list], [x[1] for x in act_plot_list], c=colormap2[categories])
+            plt.show()
 
             cv2.imshow("frame",frame_data["left_image"])
             cv2.waitKey(0)

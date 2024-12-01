@@ -54,13 +54,16 @@ class DepthCalculator:
         cx = self.P2[0, 2]  # Principal point x
         cy = self.P2[1, 2]  # Principal point y
 
-        print("xyz: ", X, Y, Z)
+        #print("xyz: ", X, Y, Z)
 
         # Get image dimensions
         img_height, img_width = self.original_img.shape[:2]
 
+        #print("img_height, img_width", img_height, img_width)
+
         # Project 3D point to image plane
-        x = (fx * X / Z) + cx
+        x = (fx * X / Z)# + cx
+        #x = x - img_width/2
 
         # Convert Y to measure from top instead of bottom
         Y_from_top = Y - (cy * Z / fy)

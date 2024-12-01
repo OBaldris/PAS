@@ -132,7 +132,7 @@ class KalmanFilter2D:
         #print("Shape of x: ", np.shape(self.X), "(Should be 6x1)")
 
         # The initial uncertainty (6x6).
-        self.P = np.ones((6,6))*0.1
+        self.P = np.ones((6,6))*0.5#0.001
 
 
         # The external motion (6x1).
@@ -153,11 +153,11 @@ class KalmanFilter2D:
         #print("Shape of H: ", np.shape(self.H), "(Should be 2x6)")
 
         # The measurement uncertainty.
-        self.R = 1  # I dunno
+        self.R = 0.5 #0.01  # I dunno
 
     def update(self):
         self.error = self.Z - self.H @ self.X
-        #print("self.error", self.error)
+        print("self.Z", self.Z)
         Ht = np.transpose(self.H)
         self.S = self.H @ self.P @ Ht + self.R
         #print("self.S", self.S)
