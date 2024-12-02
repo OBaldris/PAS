@@ -34,16 +34,19 @@ class KalmanFilter3D:
 
         # The initial uncertainty (9x9).
         #self.P = np.identity(9) * 0.5  # The "*1" is a factor. Tweak if needed.
-        self.P = np.ones((9,9))*0.5
-        #self.P = np.array([[0.5, 0.5, 0.5, 0, 0, 0, 0, 0, 0],
-        #                   [0, 0, 0, 0, 0, 0, 0, 0, 0],
-        #                   [0, 0, 0, 0, 0, 0, 0, 0, 0],
-        #                   [0, 0, 0, 0, 0, 0, 0, 0, 0],
-        #                   [0, 0, 0, 0, 0, 0, 0, 0, 0],
-        #                   [0, 0, 0, 0, 0, 0, 0, 0, 0],
-        #                   [0, 0, 0, 0, 0, 0, 0, 0, 0],
-        #                   [0, 0, 0, 0, 0, 0, 0, 0, 0],
-        #                   [0, 0, 0, 0, 0, 0, 0, 0, 0]])
+        self.P = np.identity(9)*4
+        """
+        self.P = np.array([[1, 0, 0, 0, 0, 0, 0, 0, 0],
+                           [0, 1, 0, 0, 0, 0, 0, 0, 0],
+                           [0, 0, 1, 0, 0, 0, 0, 0, 0],
+                           [0, 0, 0, 0.5, 0, 0, 0, 0, 0],
+                           [0, 0, 0, 0, 0.5, 0, 0, 0, 0],
+                           [0, 0, 0, 0, 0, 0.5, 0, 0, 0],
+                           [0, 0, 0, 0, 0, 0, .1, 0, 0],
+                           [0, 0, 0, 0, 0, 0, 0, .1, 0],
+                           [0, 0, 0, 0, 0, 0, 0, 0, .1]])
+        self.P = self.P*4
+        """
         #print("Shape of P: ", np.shape(self.P), "(Should be 9x9)")
 
         # The external motion (9x1).
@@ -67,7 +70,7 @@ class KalmanFilter3D:
         #print("Shape of H: ", np.shape(self.H), "(Should be 3x9)")
 
         # The measurement uncertainty.
-        self.R = 0.1  # I dunno
+        self.R = 0.012#05  # I dunno
 
     def update(self):
         self.error = self.Z - self.H @ self.X
@@ -132,7 +135,8 @@ class KalmanFilter2D:
         #print("Shape of x: ", np.shape(self.X), "(Should be 6x1)")
 
         # The initial uncertainty (6x6).
-        self.P = np.ones((6,6))*0.5#0.001
+        # self.P = np.ones((6,6))*0.1#0.001
+        self.P = np.identity(6) * 0.6
 
 
         # The external motion (6x1).
@@ -153,7 +157,7 @@ class KalmanFilter2D:
         #print("Shape of H: ", np.shape(self.H), "(Should be 2x6)")
 
         # The measurement uncertainty.
-        self.R = 0.5 #0.01  # I dunno
+        self.R = 0.01 #0.01  # I dunno
 
     def update(self):
         self.error = self.Z - self.H @ self.X

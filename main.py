@@ -27,9 +27,10 @@ def within_borders(pixel_x, pixel_y, img):
     margin = 5
     height = img.shape[0]
     width = img.shape[1]
-    print("img shape:", img.shape)
-    if (pixel_x-margin) > 0 or (pixel_y-margin) > 0 or (pixel_x+margin) < width or (pixel_y+margin) < height:
-        return True
+    #print("img shape:", img.shape)
+    if 0 < pixel_x < width and 0 < pixel_y < height:
+        if (pixel_x-margin) > 0 and (pixel_y-margin) > 0 and (pixel_x+margin) < width and (pixel_y+margin) < height:
+            return True
     return False
 
 def get_center(x1, y1, x2, y2):
@@ -40,6 +41,9 @@ def get_center(x1, y1, x2, y2):
 
 def dist2D(pred_x, pred_z, act_pos):
     return np.sqrt((pred_x-act_pos[0])**2 + (pred_z-act_pos[2])**2)
+
+def dist3D(pred_x, pred_y, pred_z, act_pos):
+    return np.sqrt((pred_x-act_pos[0])**2 + (pred_y-act_pos[1])**2 + (pred_z-act_pos[2])**2)
 
 def get_depth_from_bbox(depth_calculator, results):
     class_names = []
@@ -60,7 +64,15 @@ def get_depth_from_bbox(depth_calculator, results):
         confidence = result.boxes.conf.item()
         confidences.append(confidence)
 
-        coords_data, _ = depth_calculator.calculate_weighted_depth((x1, y1), (x2, y2))[0]
+        new_x1 = round(((x1 + x2) / 2) * 0.9)
+        new_x2 = round(((x1 + x2) / 2) * 1.1)
+
+        new_y1 = round(((y1 + y2) / 2) * 0.75)
+        new_y2 = round(((y1 + y2) / 2) * 1.33)
+
+        coords_data, _ = depth_calculator.calculate_weighted_depth((new_x1, new_y1), (new_x2, new_y2))[0]
+
+        #coords_data, _ = depth_calculator.calculate_weighted_depth((x1, y1), (x2, y2))[0]
         if coords_data is not None:
             world_coords.append(coords_data)
         else:
@@ -86,6 +98,8 @@ if __name__ == "__main__":
     pred_plot_list = []
     act_plot_list = []
 
+    margin = 10
+
     color11 = (0.1, 0.1, 0.4, 1.0)
     color12 = (0.2, 0.2, 0.8, 1.0)
     colormap1 = np.array([color11, color12])
@@ -100,7 +114,7 @@ if __name__ == "__main__":
     for i in range(0, 144):
         # Access a specific frame's data
         frame_data = data.get_frame_data(sequence_num=1, frame_index=i)
-        results = model(frame_data["left_image"], classes=class_indexes)
+        results = model(frame_data["left_image"], classes=class_indexes, iou=0.7, conf=0.4)
 
         DepthObj = kurac6.DepthCalculator()
         DepthObj.run(frame_data["left_image"], frame_data["right_image"], calibration_data_path, input_is_array=True)
@@ -109,42 +123,47 @@ if __name__ == "__main__":
         #print("weighted_depths", weighted_depths)
         if class_names is not None:
             new_KF_list = [None]*len(class_names)
-
-
             KF_taken = []
+
             for j in range(len(class_names)):
                 min_dist = 99999
                 KF_match_index = -1
                 center = centers[j]
-                for q in range(len(KF_list)):
+                q = 0
+                while q < len(KF_list):
                     if not KF_list:
-                        continue
+                        break
+                        #continue
                     if KF_list[q].class_name != class_names[j]:
+                        q += 1
                         continue
                     if q in KF_taken:
+                        q += 1
                         continue
 
-                    predicted_pos = [KF_list[q].X[0], KF_list[q].X[1]]
+                    predicted_pos = [KF_list[q].X[0, 0], KF_list[q].X[1, 0], KF_list[q].X[2, 0]]
+                    predicted_pixel_x, predicted_pixel_y = DepthObj.world_to_pixel(predicted_pos[0], predicted_pos[1], predicted_pos[2])
 
-                    #if not within_margin(predicted_pos[0], predicted_pos[1], weighted_depths[j]):
-                        #print("KF NR ", q, " IS NOT WITHIN MARGIN?")
-                        #continue
+                    if not within_borders(predicted_pixel_x, predicted_pixel_y, frame_data["left_image"]):
+                        del KF_list[q]
+                        continue
 
-                    dist = dist2D(predicted_pos[0], predicted_pos[1], weighted_depths[j])
-                    if dist < min_dist and dist < 10:
+                    dist = dist3D(predicted_pos[0], predicted_pos[1], predicted_pos[2], weighted_depths[j])
+                    if dist < min_dist and dist < margin:
                         min_dist = dist
                         KF_match_index = q
                         #print("MATCH     j:", j, ", q:", q)
+                    q += 1
 
                 if KF_match_index != -1:
                     new_KF_list[j] = KF_list[KF_match_index]
                     KF_taken.append(KF_match_index)
 
                 else:
-                    #new_KF_list[j] = Kalman.KalmanFilter3D()
-                    new_KF_list[j] = Kalman.KalmanFilter2D()
+                    new_KF_list[j] = Kalman.KalmanFilter3D()
+                    #new_KF_list[j] = Kalman.KalmanFilter2D()
                     new_KF_list[j].class_name = class_names[j]
-                    new_KF_list[j].X = np.array([[weighted_depths[j][0]], [weighted_depths[j][2]], [0], [0], [0], [0]])
+                    new_KF_list[j].X = np.array([[weighted_depths[j][0]], [weighted_depths[j][1]], [weighted_depths[j][2]], [0], [0], [0], [0], [0], [0]])
                     #print("new_KF_list[j].X", new_KF_list[j].X)
 
             KF_list = new_KF_list.copy()
@@ -155,11 +174,10 @@ if __name__ == "__main__":
                 # draw detection
                 cv2.circle(frame_data["left_image"], (int(center[0]),int(center[1])), 20, (0, 255, 0), 3)
 
-                KF_list[j].Z = np.array([[weighted_depths[j][0]], [weighted_depths[j][2]]])
+                KF_list[j].Z = np.array([[weighted_depths[j][0]], [weighted_depths[j][1]], [weighted_depths[j][2]]])
 
                 #print("Predicted placement", KF_list[j].X[0], " ", KF_list[j].X[1])
-                pixel_x, pixel_y = DepthObj.world_to_pixel(KF_list[j].X[0, 0], weighted_depths[j][1],
-                                                           KF_list[j].X[1, 0])
+                pixel_x, pixel_y = DepthObj.world_to_pixel(KF_list[j].X[0, 0], KF_list[j].X[1, 0], KF_list[j].X[2, 0])
                 KF_list[j].predict()
 
                 # MASSIVE DRIFT CAUSED BY DIFFERENCE IN UNITS!!!
@@ -167,13 +185,13 @@ if __name__ == "__main__":
 
                 #pixel_x, pixel_y = DepthObj.world_to_pixel(KF_list[j].X[0,0], weighted_depths[j][1], KF_list[j].X[1,0])
 
-                pred_plot_list.append([float(KF_list[j].X[0, 0]), float(KF_list[j].X[1, 0])])
+                pred_plot_list.append([float(KF_list[j].X[0, 0]), float(KF_list[j].X[2, 0])])
                 act_plot_list.append([float(weighted_depths[j][0]), float(weighted_depths[j][2])])
 
                 circle_center_coords = (pixel_x, pixel_y)#(int(KF_list[j].X[0]), int(center[1]))
 
                 #print("Actual placement", weighted_depths[j][0], " ", weighted_depths[j][2])
-                cv2.circle(frame_data["left_image"], circle_center_coords, max(int(50 / (KF_list[j].X[1] + 1)), 5), (0, 0, 255), 3)
+                cv2.circle(frame_data["left_image"], circle_center_coords, max(int(50 / (KF_list[j].X[2] + 1)), 5), (0, 0, 255), 3)
 
                 KF_list[j].update()
 
@@ -181,24 +199,20 @@ if __name__ == "__main__":
             #print("pred_plot_list[:][0]", [x[0] for x in pred_plot_list])
 
             categories = [0]*len(pred_plot_list)
-            print(categories)
+            #print(categories)
             for g in range(len(KF_list)):
                 categories[-g-1] = 1
 
-            print(categories)
+            #print(categories)
 
             plt.scatter([x[0] for x in pred_plot_list], [x[1] for x in pred_plot_list], c=colormap1[categories])
             plt.scatter([x[0] for x in act_plot_list], [x[1] for x in act_plot_list], c=colormap2[categories])
-            plt.show()
+            #plt.show()
 
-            cv2.imshow("frame",frame_data["left_image"])
-            cv2.waitKey(0)
-
-
-
+            cv2.imshow("frame_left", frame_data["left_image"])
+            #cv2.imshow("frame_right", frame_data["right_image"])
+            cv2.waitKey(100)
 
 
-
-    print("Hello, World!")
 
 
