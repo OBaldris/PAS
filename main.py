@@ -98,7 +98,7 @@ if __name__ == "__main__":
     pred_plot_list = []
     act_plot_list = []
 
-    margin = 10
+    margin = 1
 
     color11 = (0.1, 0.1, 0.4, 1.0)
     color12 = (0.2, 0.2, 0.8, 1.0)
@@ -176,7 +176,7 @@ if __name__ == "__main__":
 
                 KF_list[j].Z = np.array([[weighted_depths[j][0]], [weighted_depths[j][1]], [weighted_depths[j][2]]])
 
-                #print("Predicted placement", KF_list[j].X[0], " ", KF_list[j].X[1])
+                print("Predicted placement", KF_list[j].X[0], " ", KF_list[j].X[1], " ", KF_list[j].X[2])
                 pixel_x, pixel_y = DepthObj.world_to_pixel(KF_list[j].X[0, 0], KF_list[j].X[1, 0], KF_list[j].X[2, 0])
                 KF_list[j].predict()
 
@@ -190,7 +190,7 @@ if __name__ == "__main__":
 
                 circle_center_coords = (pixel_x, pixel_y)#(int(KF_list[j].X[0]), int(center[1]))
 
-                #print("Actual placement", weighted_depths[j][0], " ", weighted_depths[j][2])
+                print("Actual placement", weighted_depths[j][0], " ", weighted_depths[j][1], " ", weighted_depths[j][2])
                 cv2.circle(frame_data["left_image"], circle_center_coords, max(int(50 / (KF_list[j].X[2] + 1)), 5), (0, 0, 255), 3)
 
                 KF_list[j].update()

@@ -26,7 +26,7 @@ class KalmanFilter3D:
     def init_arrays(self):
         self.dt = 1
 
-        # The initial state (6x1).
+        # The initial state (9x1).
         # x = [x, y, z, dx, dy, dz, ddx, ddy, ddz]
         # Initially everything is 0.
         self.X = np.zeros((9, 1))
@@ -34,7 +34,7 @@ class KalmanFilter3D:
 
         # The initial uncertainty (9x9).
         #self.P = np.identity(9) * 0.5  # The "*1" is a factor. Tweak if needed.
-        self.P = np.identity(9)*4
+        self.P = np.identity(9)*0.1
         """
         self.P = np.array([[1, 0, 0, 0, 0, 0, 0, 0, 0],
                            [0, 1, 0, 0, 0, 0, 0, 0, 0],
@@ -50,7 +50,7 @@ class KalmanFilter3D:
         #print("Shape of P: ", np.shape(self.P), "(Should be 9x9)")
 
         # The external motion (9x1).
-        self.u = np.transpose(np.array([[0, 0, 0, 1, 1, 1, 0, 0, 0]]))
+        self.u = np.transpose(np.array([[0, 0, 0, 0, 0, 0, 0, 0, 0]]))
         #print("Shape of u: ", np.shape(self.u), "(Should be 9x1)")
 
         # The transition matrix (9x9).
@@ -70,7 +70,7 @@ class KalmanFilter3D:
         #print("Shape of H: ", np.shape(self.H), "(Should be 3x9)")
 
         # The measurement uncertainty.
-        self.R = 0.012#05  # I dunno
+        self.R = 0.01#0.005#05  # I dunno
 
     def update(self):
         self.error = self.Z - self.H @ self.X
