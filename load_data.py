@@ -85,8 +85,12 @@ class StereoVisionData:
             raise ValueError(f"Sequence {sequence_num} not loaded.")
 
         # Construct image paths for the specific frame using zero-padded format
-        left_image_path = f"{sequence['left_image_path']}{str(frame_index).zfill(6)}.png"
-        right_image_path = f"{sequence['right_image_path']}{str(frame_index).zfill(6)}.png"
+        if sequence_num == 1:
+            left_image_path = f"{sequence['left_image_path']}{str(frame_index).zfill(6)}.png"
+            right_image_path = f"{sequence['right_image_path']}{str(frame_index).zfill(6)}.png"
+        else:
+            left_image_path = f"{sequence['left_image_path']}{str(frame_index).zfill(10)}.png"
+            right_image_path = f"{sequence['right_image_path']}{str(frame_index).zfill(10)}.png"
         
         # Load left and right images
         left_image = cv2.imread(left_image_path)
@@ -107,20 +111,20 @@ class StereoVisionData:
             "labels": frame_labels
         }
 
-# Example usage
-data = StereoVisionData()
+# # Example usage
+# data = StereoVisionData()
 
-# Load a specific sequence
-data.load_sequence(sequence_num=1)
+# # Load a specific sequence
+# data.load_sequence(sequence_num=1)
 
-# If you want to load multiple sequences
-#sequence_numbers = [1, 2, 3]  # List of sequence numbers to load
-#for seq_num in sequence_numbers:
-#    data.load_sequence(seq_num)
+# # If you want to load multiple sequences
+# #sequence_numbers = [1, 2, 3]  # List of sequence numbers to load
+# #for seq_num in sequence_numbers:
+# #    data.load_sequence(seq_num)
 
 
-# Access a specific frame's data
-frame_data = data.get_frame_data(sequence_num=1, frame_index=0)
+# # Access a specific frame's data
+# frame_data = data.get_frame_data(sequence_num=1, frame_index=0)
 
 # Display frame details to verify that the output reflects labels and timestamps accurately
 #print("Left Image File:", f"{data.sequences[1]['left_image_path']}{str(0).zfill(6)}.png")

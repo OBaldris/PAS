@@ -109,11 +109,11 @@ if __name__ == "__main__":
     colormap2 = np.array([color21, color22])
 
     # Load a specific sequence
-    data.load_sequence(sequence_num=1)
+    data.load_sequence(sequence_num=2)
 
-    for i in range(0, 144):
+    for i in range(0, 208): #144
         # Access a specific frame's data
-        frame_data = data.get_frame_data(sequence_num=1, frame_index=i)
+        frame_data = data.get_frame_data(sequence_num=2, frame_index=i)
         results = model(frame_data["left_image"], classes=class_indexes, iou=0.7, conf=0.4)
 
         DepthObj = kurac6.DepthCalculator()

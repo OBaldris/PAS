@@ -48,6 +48,9 @@ class DepthCalculator:
 
     def world_to_pixel(self, X, Y, Z):
         """Convert world coordinates in meters to pixel coordinates with (0,0) at top-left."""
+        if Z == 0:
+            Z += 0.001
+
         # Get camera parameters from P2 matrix
         fx = self.P2[0, 0]  # Focal length x
         fy = self.P2[1, 1]  # Focal length y
@@ -181,11 +184,11 @@ class DepthCalculator:
                     
                     return ((X, Y, Z), mode_depth), (x1, y1), (x2, y2)
             
-            return None, (x1, y1), (x2, y2)
+            return (None,None), (x1, y1), (x2, y2)
             
         except Exception as e:
             print(f"Error in depth calculation: {e}")
-            return None, top_left, bottom_right
+            return (None, None), top_left, bottom_right
 
     def compute_disparity(self, left_gray, right_gray):
         stereo = cv2.StereoSGBM_create(
