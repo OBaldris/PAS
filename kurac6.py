@@ -254,5 +254,5 @@ if __name__ == "__main__":
     calculator.run(
         r'C:\Users\ivorb\Downloads\34759_final_project_rect\34759_final_project_rect\seq_01\image_02\data\000000.png',
         r'C:\Users\ivorb\Downloads\34759_final_project_rect\34759_final_project_rect\seq_01\image_03\data\000000.png',
-        'calib_cam_to_cam.txt'
+        r'calib_cam_to_cam.txt'
     )

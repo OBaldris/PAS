@@ -10,7 +10,7 @@ class KalmanFilter3D:
         self.H = None
         self.R = None
 
-        self.init_arrays()
+        #self.init_arrays()
 
         self.Xpred = np.copy(self.X)
         self.Ppred = np.copy(self.P)
@@ -20,11 +20,12 @@ class KalmanFilter3D:
         self.S = None
         self.K = None
 
-        self.dt = 1
+        self.dt = None
         self.class_name = None
+        self.margin = 0
 
     def init_arrays(self):
-        self.dt = 1
+        self.dt = 0.2#0.25#0.04
 
         # The initial state (9x1).
         # x = [x, y, z, dx, dy, dz, ddx, ddy, ddz]
@@ -34,19 +35,56 @@ class KalmanFilter3D:
 
         # The initial uncertainty (9x9).
         #self.P = np.identity(9) * 0.5  # The "*1" is a factor. Tweak if needed.
-        self.P = np.identity(9)*0.1
-        """
-        self.P = np.array([[1, 0, 0, 0, 0, 0, 0, 0, 0],
-                           [0, 1, 0, 0, 0, 0, 0, 0, 0],
-                           [0, 0, 1, 0, 0, 0, 0, 0, 0],
-                           [0, 0, 0, 0.5, 0, 0, 0, 0, 0],
-                           [0, 0, 0, 0, 0.5, 0, 0, 0, 0],
-                           [0, 0, 0, 0, 0, 0.5, 0, 0, 0],
-                           [0, 0, 0, 0, 0, 0, .1, 0, 0],
-                           [0, 0, 0, 0, 0, 0, 0, .1, 0],
-                           [0, 0, 0, 0, 0, 0, 0, 0, .1]])
-        self.P = self.P*4
-        """
+        # self.P = np.identity(9)*1000
+        if self.class_name == "person":
+            #1.5 is chosen because 1.42 meters/second is roughly the average speed of a walking person.
+            #This is then squared, because it is the covariance - which relies on the units of whatever you're measuring, but squared.
+            self.P = np.array([[1, 0, 0, 0, 0, 0, 0, 0, 0],
+                               [0, 1, 0, 0, 0, 0, 0, 0, 0],
+                               [0, 0, 1, 0, 0, 0, 0, 0, 0],
+                               [0, 0, 0, 1.42**2, 0, 0, 0, 0, 0],
+                               [0, 0, 0, 0, 0, 0, 0, 0, 0],
+                               [0, 0, 0, 0, 0, 1.42**2, 0, 0, 0],
+                               [0, 0, 0, 0, 0, 0, 0, 0, 0],
+                               [0, 0, 0, 0, 0, 0, 0, 0, 0],
+                               [0, 0, 0, 0, 0, 0, 0, 0, 0]])
+            self.margin = 2
+            # The measurement uncertainty.
+            self.R = 0.5  # 74#75 #0.005#05  # I dunno
+
+        if self.class_name == "bicycle":
+            # 2.7 is chosen because 2.7 meters/second is about 10km/h
+            # This is then squared, because it is the covariance - which relies on the units of whatever you're measuring, but squared.
+            self.P = np.array([[1, 0, 0, 0, 0, 0, 0, 0, 0],
+                               [0, 1, 0, 0, 0, 0, 0, 0, 0],
+                               [0, 0, 1, 0, 0, 0, 0, 0, 0],
+                               [0, 0, 0, 2.7**2, 0, 0, 0, 0, 0],
+                               [0, 0, 0, 0, 0, 0, 0, 0, 0],
+                               [0, 0, 0, 0, 0, 2.7**2, 0, 0, 0],
+                               [0, 0, 0, 0, 0, 0, 0.1, 0, 0],
+                               [0, 0, 0, 0, 0, 0, 0, 0, 0],
+                               [0, 0, 0, 0, 0, 0, 0, 0, 0.1]])
+            self.margin = 3
+            # The measurement uncertainty.
+            self.R = 0.5  # 74#75 #0.005#05  # I dunno
+
+        if self.class_name == "car":
+            # 2.7 is chosen because 2.7 meters/second is about 10km/h
+            # This is then squared, because it is the covariance - which relies on the units of whatever you're measuring, but squared.
+            self.P = np.array([[1, 0, 0, 0, 0, 0, 0, 0, 0],
+                               [0, 1, 0, 0, 0, 0, 0, 0, 0],
+                               [0, 0, 1, 0, 0, 0, 0, 0, 0],
+                               [0, 0, 0, 2.7**2, 0, 0, 0, 0, 0],
+                               [0, 0, 0, 0, 0, 0, 0, 0, 0],
+                               [0, 0, 0, 0, 0, 2.7**2, 0, 0, 0],
+                               [0, 0, 0, 0, 0, 0, 0.1, 0, 0],
+                               [0, 0, 0, 0, 0, 0, 0, 0, 0],
+                               [0, 0, 0, 0, 0, 0, 0, 0, 0.1]])
+            self.margin = 3
+            # The measurement uncertainty.
+            self.R = 0.5  # 74#75 #0.005#05  # I dunno
+
+
         #print("Shape of P: ", np.shape(self.P), "(Should be 9x9)")
 
         # The external motion (9x1).
@@ -55,13 +93,13 @@ class KalmanFilter3D:
 
         # The transition matrix (9x9).
         self.F = np.array([[1, 0, 0, self.dt, 0, 0, 0.5 * pow(self.dt, 2), 0, 0],
-                      [0, 1, 0, 0, self.dt, 0, 0, 0.5 * pow(self.dt, 2), 0],
+                      [0, 1, 0, 0, 0, 0, 0, 0, 0],
                       [0, 0, 1, 0, 0, self.dt, 0, 0, 0.5 * pow(self.dt, 2)],
                       [0, 0, 0, 1, 0, 0, self.dt, 0, 0],
-                      [0, 0, 0, 0, 1, 0, 0, self.dt, 0],
+                      [0, 0, 0, 0, 0, 0, 0, 0, 0],
                       [0, 0, 0, 0, 0, 1, 0, 0, self.dt],
                       [0, 0, 0, 0, 0, 0, 1, 0, 0],
-                      [0, 0, 0, 0, 0, 0, 0, 1, 0],
+                      [0, 0, 0, 0, 0, 0, 0, 0, 0],
                       [0, 0, 0, 0, 0, 0, 0, 0, 1]])
         #print("Shape of F: ", np.shape(self.F), "(Should be 9x9)")
 
@@ -69,8 +107,6 @@ class KalmanFilter3D:
         self.H = np.array([[1, 0, 0, 0, 0, 0, 0, 0, 0], [0, 1, 0, 0, 0, 0, 0, 0, 0], [0, 0, 1, 0, 0, 0, 0, 0, 0]])
         #print("Shape of H: ", np.shape(self.H), "(Should be 3x9)")
 
-        # The measurement uncertainty.
-        self.R = 0.01#0.005#05  # I dunno
 
     def update(self):
         self.error = self.Z - self.H @ self.X
