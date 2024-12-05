@@ -2,7 +2,7 @@ import numpy as np
 import cv2
 from ultralytics import YOLO
 import load_data
-import kurac6
+import DepthCalculator
 import Kalman
 import matplotlib.pyplot as plt
 from scipy.optimize import linear_sum_assignment
